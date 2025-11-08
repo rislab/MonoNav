@@ -384,6 +384,9 @@ This involves resizing the image, scaling the camera matrix, and undistorting th
 def transform_image(image, mtx, dist, kinect):
     if image.shape[0] != kinect.height or image.shape[1] != kinect.width:
         # Resize the camera matrix to match new dimensions
+        # The mapping from robot camera pixels to Kinect pixels can be expressed as:
+        # p_kinect = K_kinect @ np.linalg.inv(K_robot) @ p_robot_undistorted
+        # essentially, scaling is the same as undoing the original intrinsics and applying the new intrinsics 
         scale_vec = np.array([kinect.width / image.shape[1], kinect.height / image.shape[0], 1]).reshape((3,1))
         mtx = mtx * scale_vec
         # Resize image to match the kinect dimensions & new intrinsics

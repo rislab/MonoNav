@@ -2,9 +2,9 @@
 data_dir: 'data/demo_hallway'
 save_dir_prefix: 'data/mononav-'
 # Camera Settings
-camera_num: 0 # camera number index (test with utils/test_camera.py), try (-1, 0, 1, 2, ...)
+camera_num: 2 # camera number index (test with utils/test_camera.py), try (-1, 0, 1, 2, ...)
 camera_source: 'crazyflie' # used for naming files
-camera_calibration_path: 'utils/calibration/demo_intrinsics.json' # camera calibration file (for undistortion)
+camera_calibration_path: 'utils/calibration/intrinsics.json' # camera calibration file (for undistortion)
 
 # ZoeDepth Settings
 zoedepth_mode: "eval" # "eval" or "infer" - see ZoeDepth documentation for other settings
@@ -33,7 +33,7 @@ min_dist2goal: 1.0 # termination condition for reaching the goal, meters
 
 
 # Crazyflie Settings
-radio_uri: 'radio://0/4/2M/E7E7E7E7E7' # update the drone ID# to match your vehicle, check using cfclient
+radio_uri: 'radio://0/80/2M/E7E7E7E703 ' # update the drone ID# to match your vehicle, check using cfclient
 height: 1.0 # crazyflie flight altitude, meters
 FLY_CRAZYFLIE: True # whether to actually fly the crazyflie
 # Control gain settings (TUNED FOR CRAZYFLIE)
