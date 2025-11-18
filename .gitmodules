@@ -1,3 +1,6 @@
 [submodule "ZoeDepth"]
 	path = ZoeDepth
 	url = https://github.com/isl-org/ZoeDepth.git
+[submodule "Depth-Anything-V2"]
+	path = Depth-Anything-V2
+	url = https://github.com/DepthAnything/Depth-Anything-V2.git
