@@ -16,9 +16,9 @@ intrinsics = o3d.camera.PinholeCameraIntrinsic(width, height, fx, fy, cx, cy)
 
 # Directory setup
 
-rgb_dir = Path("./data/lab_data/crazyflie-rgb-images")
-depth_dir = Path("./data/lab_data/kinect-depth-images")
-poses_dir = Path("./data/lab_data/crazyflie-poses")
+rgb_dir = Path("./data/down_selected/images")
+depth_dir = Path("./data/down_selected/depth")
+poses_dir = Path("./data/down_selected/poses")
 
 # Sort files to ensure correspondence
 rgb_files = sorted(rgb_dir.glob("*.jpg"))
@@ -27,7 +27,7 @@ pose_files = sorted(poses_dir.glob("*.txt"))
 
 
 
-num_samples = 10 #min(len(rgb_files), len(depth_files), len(pose_files))
+num_samples = len(rgb_files) #min(len(rgb_files), len(depth_files), len(pose_files))
 
 rgb_files = rgb_files[:num_samples]
 depth_files = depth_files[:num_samples]
@@ -64,9 +64,9 @@ for rgb_path, depth_path, pose_path in zip(rgb_files, depth_files, pose_files):
     pcd_combined += pcd
 
 # Filter noise
-pcd_combined, ind = pcd_combined.remove_statistical_outlier(nb_neighbors=20, std_ratio=2.0)
-pcd_combined = pcd_combined.voxel_down_sample(voxel_size=0.01)
-pcd_combined.estimate_normals()
+#pcd_combined, ind = pcd_combined.remove_statistical_outlier(nb_neighbors=20, std_ratio=2.0)
+#pcd_combined = pcd_combined.voxel_down_sample(voxel_size=0.01)
+#pcd_combined.estimate_normals()
 
 # Visualize and save
 o3d.visualization.draw_geometries([pcd_combined])
