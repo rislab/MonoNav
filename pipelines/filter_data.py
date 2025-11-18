@@ -20,12 +20,31 @@ This script performs the following tasks:
 
 """
 
+import sys
+import os
+parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+print(parent_dir)
+sys.path.append(parent_dir)
 import numpy as np
 import glob
 import cv2
 import open3d as o3d
-import os
 import shutil
+from PIL import Image
+from utils.utils import compute_depth, load_config, get_calibration_values, transform_image
+
+# -------------------------------
+# Get Intrinsics
+# -------------------------------
+def get_intrinsics():
+    config = load_config("config.yml")
+
+    # Load the calibration values
+    camera_calibration_path = config["camera_calibration_path"]
+    mtx, dist = get_calibration_values(camera_calibration_path)
+    # Kinect intrinsic matrix
+    kinect = o3d.camera.PinholeCameraIntrinsic(o3d.camera.PinholeCameraIntrinsicParameters.PrimeSenseDefault)
+    return mtx, dist, kinect
 
 # -------------------------------
 # Load pose given frame ID
@@ -91,6 +110,18 @@ def downselect_views(poses_list, image_scores, min_dist=0.2):
         if keep:
             selected.append(idx)
     return selected
+
+# -------------------------------
+# Undistort Images
+# -------------------------------
+def undistort_image(image, new_path, mtx, dist, kinect):
+    # Read in image with Pillow and convert to RGB
+    crazyflie_rgb = Image.open(image)#.convert("RGB")  # load
+    # Resize, Undistort, and Warp image to kinect's dimensions and intrinsics
+    kinect_rgb = transform_image(np.asarray(crazyflie_rgb), mtx, dist, kinect)
+    kinect_rgb = cv2.cvtColor(kinect_rgb, cv2.COLOR_BGR2RGB)
+    cv2.imwrite(new_path, kinect_rgb)
+
 
 # -------------------------------
 # Camera frustum
@@ -171,6 +202,8 @@ def save_downselected(filtered_rgb, filtered_poses, output_root="down_selected")
     os.makedirs(image_dir, exist_ok=True)
     os.makedirs(pose_dir, exist_ok=True)
 
+    mtx, dist, kinect = get_intrinsics()
+
 
     for rgb_path, pose_matrix in zip(filtered_rgb, filtered_poses):
         # Frame ID
@@ -178,7 +211,7 @@ def save_downselected(filtered_rgb, filtered_poses, output_root="down_selected")
 
         # ----------------- Save RGB -----------------
         rgb_dest = os.path.join(image_dir, os.path.basename(rgb_path))
-        shutil.copyfile(rgb_path, rgb_dest)
+        undistort_image(rgb_path, rgb_dest, mtx, dist, kinect)
 
         # ----------------- Save pose -----------------
         pose_dest = os.path.join(pose_dir, f"{frame_id}.txt")
@@ -268,4 +301,4 @@ def main(poses_path, rgb_path, min_dist=0.2, output_name='down_selected'):
 if __name__ == "__main__":
 
     
-    main('/home/mikea/Documents/Projects/Crazyflie/monocular_reconstruction/MonoNav/data/lab_data/crazyflie-poses', '/home/mikea/Documents/Projects/Crazyflie/monocular_reconstruction/MonoNav/data/lab_data/crazyflie-rgb-images/')
+    main('/home/nicholas/MonoNav/data/lab_data/crazyflie-poses', '/home/nicholas/MonoNav/data/lab_data/crazyflie-rgb-images/')
