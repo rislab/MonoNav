@@ -160,7 +160,7 @@ def display_views(poses, frustum_scale=0.05, axis_scale=0.05):
 # -------------------------------
 # Save downselected RGB, depth, and pose files
 # -------------------------------
-def save_downselected(filtered_rgb, filtered_poses, depth_dict, output_root="down_selected"):
+def save_downselected(filtered_rgb, filtered_poses, output_root="down_selected"):
     """
     Saves RGB images, poses, and depth images for downselected views.
     """
@@ -170,7 +170,7 @@ def save_downselected(filtered_rgb, filtered_poses, depth_dict, output_root="dow
     depth_dir = os.path.join(output_root, "depth")
     os.makedirs(image_dir, exist_ok=True)
     os.makedirs(pose_dir, exist_ok=True)
-    os.makedirs(depth_dir, exist_ok=True)
+
 
     for rgb_path, pose_matrix in zip(filtered_rgb, filtered_poses):
         # Frame ID
@@ -184,67 +184,88 @@ def save_downselected(filtered_rgb, filtered_poses, depth_dict, output_root="dow
         pose_dest = os.path.join(pose_dir, f"{frame_id}.txt")
         np.savetxt(pose_dest, pose_matrix, fmt="%.18e")
 
-        # ----------------- Save depth -----------------
-        if frame_id in depth_dict:
-            depth_path = depth_dict[frame_id]
-            depth_dest = os.path.join(depth_dir, os.path.basename(depth_path))
-            shutil.copyfile(depth_path, depth_dest)
 
-# -------------------------------
-# Main pipeline
-# -------------------------------
-if __name__ == "__main__":
-    # Paths
-    pose_files = glob.glob("../../data/lab_data/crazyflie-poses/*.txt")
-    rgb_files = glob.glob("../../data/lab_data/crazyflie-rgb-images/*.jpg")
-    depth_files = glob.glob("../../data/lab_data/kinect-depth-images/*.png")  # adjust extension
+def main(poses_path, rgb_path, min_dist=0.2, output_name='down_selected'):
+    """
+    Main pipeline for filtering and downselecting a Crazyflie RGB–Depth–Pose dataset.
+    Uses the user's exact filename-splitting convention.
+    """
 
-    # Load poses into dictionary
+    # --------------------------------------------
+    # 1. Gather files
+    # --------------------------------------------
+    pose_files = glob.glob(os.path.join(poses_path, "*.txt"))
+    rgb_files  = glob.glob(os.path.join(rgb_path, "*.jpg"))
+
+
+    # --------------------------------------------
+    # 2. Load poses into dictionary
+    # --------------------------------------------
     poses_dict = {}
     for f in pose_files:
-        frame_id = os.path.splitext(os.path.basename(f))[0].split('-')[-1].split(".")[0]
+        base = os.path.splitext(os.path.basename(f))[0]
+        frame_id = base.split('-')[-1].split(".")[0]   # ← your convention
         poses_dict[frame_id] = np.loadtxt(f)
 
-    # Build depth mapping using same strip logic
-    depth_dict = {}
-    for f in depth_files:
-        frame_id = os.path.splitext(os.path.basename(f))[0].split('-')[-1].split(".")[0]
-        depth_dict[frame_id] = f
-
-    # Image-driven pipeline
+    # --------------------------------------------
+    # 3. Load depth dict
+    # --------------------------------------------
+   
+    # --------------------------------------------
+    # 4. Build triplets
+    # --------------------------------------------
     poses_list = []
     rgb_list = []
     depth_list = []
     image_scores = []
 
-    for rgb_path in rgb_files:
-        frame_id = os.path.splitext(os.path.basename(rgb_path))[0].split('-')[-1].split(".")[0]
-        if frame_id in poses_dict:
-            poses_list.append(load_pose_for_frame(poses_dict, frame_id))
-            rgb_list.append(rgb_path)
-            #depth_list.append(depth_dict[frame_id])
-            image_scores.append(score_image(rgb_path))
+    for rgb_file in rgb_files:
+        base = os.path.splitext(os.path.basename(rgb_file))[0]
+        frame_id = base.split('-')[-1].split(".")[0]
+
+        # Must have pose
+        if frame_id not in poses_dict:
+            continue
+
+  
+        pose = load_pose_for_frame(poses_dict, frame_id)
+        score = score_image(rgb_file)
+
+        poses_list.append(pose)
+        rgb_list.append(rgb_file)
+        image_scores.append(score)
 
     image_scores = np.array(image_scores)
-    print(f"Found {len(poses_list)} valid RGB-Depth-Pose triplets")
+    print(f"[INFO] Found {len(poses_list)} valid RGB–Pose–Depth matches")
 
-    # Downselect based on distance + image score
-    selected_idx = downselect_views(poses_list, image_scores, min_dist=0.2)
+    # --------------------------------------------
+    # 5. Downselect based on score + spacing
+    # --------------------------------------------
+    selected_idx = downselect_views(poses_list, image_scores, min_dist=min_dist)
+
     filtered_poses = [poses_list[i] for i in selected_idx]
     filtered_rgb = [rgb_list[i] for i in selected_idx]
-    #filtered_depth = [depth_list[i] for i in selected_idx]
-    filtered_scores = [image_scores[i] for i in selected_idx]
 
-    print(f"Kept {len(filtered_poses)} / {len(poses_list)} views after downselection")
-    # for score in selected_idx:
-    #     img = rgb_list[score]
-    #     score = image_scores[score]
-    #     #print(img, score)
-    for img in filtered_rgb:
-        img = cv2.imread(img, cv2.IMREAD_COLOR_BGR)
-        cv2.imshow("Selected", img)
-        cv2.waitKey(0)
- 
-    # Display selected cameras
-    display_views(filtered_poses)
-    save_downselected(filtered_rgb, filtered_poses, depth_dict, output_root="down_selected")
+    print(f"[INFO] Kept {len(filtered_poses)} / {len(poses_list)} frames after downselection")
+
+    # --------------------------------------------
+    # 6. Visualize
+    # --------------------------------------------
+    if len(filtered_poses) > 0:
+        display_views(filtered_poses)
+
+    # --------------------------------------------
+    # 7. Save
+    # --------------------------------------------
+    save_downselected(filtered_rgb, filtered_poses, output_root=output_name)
+
+    print(f"[INFO] Saved downselected dataset → {output_name}")
+
+
+# -------------------------------
+# Main pipeline
+# -------------------------------
+if __name__ == "__main__":
+
+    
+    main('/home/mikea/Documents/Projects/Crazyflie/monocular_reconstruction/MonoNav/data/lab_data/crazyflie-poses', '/home/mikea/Documents/Projects/Crazyflie/monocular_reconstruction/MonoNav/data/lab_data/crazyflie-rgb-images/')
