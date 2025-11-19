@@ -37,7 +37,7 @@ from utils.utils import compute_depth, load_config, get_calibration_values, tran
 # Get Intrinsics
 # -------------------------------
 def get_intrinsics():
-    config = load_config("config.yml")
+    config = load_config(os.path.join(parent_dir, "config.yml"))
 
     # Load the calibration values
     camera_calibration_path = config["camera_calibration_path"]
