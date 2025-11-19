@@ -196,13 +196,12 @@ def save_downselected(filtered_rgb, filtered_poses, output_root="down_selected")
     Saves RGB images, poses, and depth images for downselected views.
     """
     # Create folder structure
-    image_dir = os.path.join(output_root, "images")
-    pose_dir  = os.path.join(output_root, "poses")
-    depth_dir = os.path.join(output_root, "depth")
+    image_dir = os.path.join(output_root, "images-down-selected")
+    pose_dir  = os.path.join(output_root, "poses-down-selected")
+
     os.makedirs(image_dir, exist_ok=True)
     os.makedirs(pose_dir, exist_ok=True)
 
-    mtx, dist, kinect = get_intrinsics()
 
 
     for rgb_path, pose_matrix in zip(filtered_rgb, filtered_poses):
@@ -211,24 +210,27 @@ def save_downselected(filtered_rgb, filtered_poses, output_root="down_selected")
 
         # ----------------- Save RGB -----------------
         rgb_dest = os.path.join(image_dir, os.path.basename(rgb_path))
-        undistort_image(rgb_path, rgb_dest, mtx, dist, kinect)
+        shutil.copyfile(rgb_path, rgb_dest)
 
         # ----------------- Save pose -----------------
         pose_dest = os.path.join(pose_dir, f"{frame_id}.txt")
         np.savetxt(pose_dest, pose_matrix, fmt="%.18e")
+    return image_dir, pose_dir
 
 
-def main(poses_path, rgb_path, min_dist=0.2, output_name='down_selected'):
+def main(poses_path, rgb_path, min_dist=0.2, output_name='down_selected', undistort=False):
     """
     Main pipeline for filtering and downselecting a Crazyflie RGB–Depth–Pose dataset.
     Uses the user's exact filename-splitting convention.
+
+    down-select (using distorted or undistort img) 
     """
 
     # --------------------------------------------
     # 1. Gather files
     # --------------------------------------------
     pose_files = glob.glob(os.path.join(poses_path, "*.txt"))
-    rgb_files  = glob.glob(os.path.join(rgb_path, "*.jpg"))
+    distorted_rgb_files  = glob.glob(os.path.join(rgb_path, "*.jpg"))
 
 
     # --------------------------------------------
@@ -241,18 +243,33 @@ def main(poses_path, rgb_path, min_dist=0.2, output_name='down_selected'):
         poses_dict[frame_id] = np.loadtxt(f)
 
     # --------------------------------------------
-    # 3. Load depth dict
+    # 3. Undistort images
     # --------------------------------------------
-   
+    rgbs_to_process = []
+    undistorted_folder = os.path.join(output_name, "temp-undistorted")
+    os.makedirs(undistorted_folder, exist_ok=True) # temp
+    if undistort:
+        mtx, dist, kinect = get_intrinsics()
+        undistorted_rgb_files = []
+        for f in distorted_rgb_files:
+            file_name = f.split("/")[-1]
+            rgb_dest = os.path.join(undistorted_folder, file_name)
+            undistort_image(f, rgb_dest, mtx, dist, kinect)
+            undistorted_rgb_files.append(rgb_dest)
+
+        rgbs_to_process = undistorted_rgb_files
+    else:
+        rgbs_to_process = distorted_rgb_files
+    
+
     # --------------------------------------------
     # 4. Build triplets
     # --------------------------------------------
     poses_list = []
     rgb_list = []
-    depth_list = []
     image_scores = []
 
-    for rgb_file in rgb_files:
+    for rgb_file in rgbs_to_process:
         base = os.path.splitext(os.path.basename(rgb_file))[0]
         frame_id = base.split('-')[-1].split(".")[0]
 
@@ -290,9 +307,10 @@ def main(poses_path, rgb_path, min_dist=0.2, output_name='down_selected'):
     # --------------------------------------------
     # 7. Save
     # --------------------------------------------
-    save_downselected(filtered_rgb, filtered_poses, output_root=output_name)
-
+    img_dir, pose_dir = save_downselected(filtered_rgb, filtered_poses, output_root=output_name)
+    os.removedirs(undistorted_folder)
     print(f"[INFO] Saved downselected dataset → {output_name}")
+    return img_dir, pose_dir
 
 
 # -------------------------------
