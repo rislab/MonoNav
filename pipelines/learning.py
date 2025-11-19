@@ -19,7 +19,7 @@ from PIL import Image
 import numpy as np
 import matplotlib
 
-from utils.utils import compute_depth, load_config, get_calibration_values, transform_image
+from utils.utils import *
 
 """"
 This script runs a depth estimation model on a directory of RGB images and saves the depth images.
@@ -72,7 +72,8 @@ def convert_depth(model, dir, model_type = "zoe"):
     os.makedirs(depth_dir, exist_ok=True)
 
     # Figure out how many images are in folder by counting .jpg files
-    rgb_files = [os.path.join(image_dir, name) for name in os.listdir(image_dir) if os.path.isfile(os.path.join(image_dir, name)) and name.endswith(".jpg")][:-1]
+    rgb_files = [os.path.join(image_dir, name) for name in os.listdir(image_dir) if os.path.isfile(os.path.join(image_dir, name)) and \
+                name.endswith(".jpg")][:-1]
 
     start_time = time.time()
     frame_number = 0
@@ -103,14 +104,113 @@ def convert_depth(model, dir, model_type = "zoe"):
 
     print("Time to compute depth for %d images: %f"%(end_frame, time.time()-start_time))
 
+
+# -------------------------------
+# Initialize TRDF VoxelBlockGrid
+# -------------------------------
+def load_vbg(config):
+    depth_scale = config["VoxelBlockGrid"]["depth_scale"]
+    depth_max = config["VoxelBlockGrid"]["depth_max"]
+    trunc_voxel_multiplier = config["VoxelBlockGrid"]["trunc_voxel_multiplier"]
+    weight_threshold = config["weight_threshold"] # for planning and visualization (!! important !!)
+    device = config["VoxelBlockGrid"]["device"]
+
+    vbg = VoxelBlockGrid(depth_scale, depth_max, trunc_voxel_multiplier, o3d.core.Device(device))
+    return vbg, weight_threshold
+
+# -------------------------------
+# Generate PointCloud
+# -------------------------------
+def generate_pointcloud(dir, config, model_type = "zoe", addPose = True):
+    poses = [] # for visualization
+    t_start = time.time()
+    depth_dir = os.path.join(dir, "depth", model_type)
+    image_dir = os.path.join(dir, "images")
+    pose_dir = os.path.join(dir, "poses")
+    pc_dir = os.path.join(dir, "pointcloud")
+
+    os.makedirs(pc_dir, exist_ok=True)
+
+    depth_files = rgb_files = [os.path.join(depth_dir, name) for name in os.listdir(depth_dir) if os.path.isfile(os.path.join(depth_dir, name)) and \
+                name.endswith(".npy")]
+    rgb_files = [os.path.join(image_dir, name) for name in os.listdir(image_dir) if os.path.isfile(os.path.join(image_dir, name)) and \
+                name.endswith(".jpg")]
+    pose_files = [os.path.join(pose_dir, name) for name in os.listdir(pose_dir) if os.path.isfile(os.path.join(pose_dir, name)) and \
+                name.endswith(".txt")]
+    
+    depth_files = sorted(depth_files)
+    rgb_files = sorted(rgb_files)
+    pose_files = sorted(pose_files)
+
+    vbg, weight_threshold = load_vbg(config)    
+
+    # Get last frame
+    frame_number = 0
+    end_frame = len(rgb_files)
+
+    for rgb_file, depth_file, pose_file in zip(rgb_files, depth_files, pose_files):
+        # Get the frame number from the depth filename
+        print("Integrating frame %d/%d"%(frame_number,end_frame))
+        # Get rbg_file
+
+        # Read in camera pose
+        cam_pose = np.loadtxt(pose_file)
+        poses.append(cam_pose)
+
+        # Get color image with Pillow and convert to RGB
+        color = Image.open(rgb_file).convert("RGB")  # load
+
+        # Integrate
+        if model_type == "zoe":
+            depth_numpy = np.load(depth_file) # mm
+        else:
+            depth_numpy = np.load(depth_file)*1000
+        vbg.integration_step(color, depth_numpy, cam_pose)
+        frame_number += 1
+
+    #####################################################################
+    # Print out timing information
+    t_end = time.time()
+    print("Time taken (s): ", t_end - t_start)
+    print("FPS: ", end_frame/(t_end - t_start))
+
+    pcd = vbg.vbg.extract_point_cloud(weight_threshold)
+
+    if addPose:
+        pose_lineset = get_poses_lineset(poses)
+        visualizer = o3d.visualization.Visualizer()
+        visualizer.create_window()
+        visualizer.add_geometry(pcd.to_legacy())
+        visualizer.add_geometry(pose_lineset)
+        for pose in poses:
+            # Add coordinate frame ( The x, y, z axis will be rendered as red, green, and blue arrows respectively.)
+            coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame().scale(0.5, center=(0, 0, 0))
+            visualizer.add_geometry(coordinate_frame.transform(pose))
+        visualizer.run()
+        visualizer.destroy_window()
+    else:
+        o3d.visualization.draw([pcd])
+
+#####################################################################
+
+    npz_filename = os.path.join(pc_dir, f"vbg_{model_type}.npz")
+    ply_filename = os.path.join(pc_dir, f"pointcloud_{model_type}.ply")
+    print('Saving npz to {}...'.format(npz_filename))
+    print('Saving ply to {}...'.format(ply_filename))
+
+    vbg.vbg.save(npz_filename)
+    o3d.io.write_point_cloud(ply_filename, pcd.to_legacy())
+
+
 def main(dir, model_type = "zoe"):
+    config = load_config("config.yml")
     if model_type == "zoe":
-        config = load_config("config.yml")
         model = load_zoedepth(config)
     elif model_type == "depthany":
         model = load_depthany(max_depth=20)
     
     convert_depth(model = model, dir = dir, model_type = model_type)
+    generate_pointcloud(dir = dir, config = config, model_type = model_type)
 
 
 if __name__ == "__main__":    
