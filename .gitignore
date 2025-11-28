@@ -1,13 +1,11 @@
 # Project files
 # Ignore everything in the /data/ folder
-/data/*
+/data/
 # Except the data folder itself
-!/data/
+
+/bags
 # And the demo_hallway folder and its contents
-!/data/demo_hallway/
-/data/demo_hallway/*
-!/data/demo_hallway/crazyflie-poses/
-!/data/demo_hallway/crazyflie-rgb-images/
+
 
 /utils/calibration/calibration_pictures/*
 /utils/calibration/calibration_output/*
